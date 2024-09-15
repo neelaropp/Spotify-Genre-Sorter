@@ -1,0 +1,1092 @@
+---
+title: "Spotify Project Continued"
+author: "Neela Ropp"
+date: "2024-06-01"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load necessary library
+knitr::opts_chunk$set(echo = TRUE)
+options(repos = c(CRAN = "https://cloud.r-project.org/"))
+install.packages("mclust")
+install.packages("aricode")
+install.packages("dbscan")
+library(dbscan)
+library(mclust)
+library(aricode)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+install.packages("patchwork")
+library(patchwork)
+install.packages("purrr")
+library(purrr)
+library(dplyr)
+
+# Read the CSV file into a dataframe
+spotify_data <- read.csv("~/Desktop/spotify.csv")
+
+# Check the first few rows of the dataframe to ensure it loaded correctly
+head(spotify_data)
+
+
+```
+
+```{r}
+# Load necessary library
+
+library(readr)
+library(dplyr)
+
+# Read the CSV file into a dataframe
+spotify <- read_csv("~/Desktop/spotify.csv")
+
+# Check the first few rows of the dataframe to ensure it loaded correctly
+head(spotify_data)
+
+```
+
+```{r}
+summary(spotify)
+```
+
+```{r}
+# Load necessary libraries
+library(stringr)
+library(dplyr)
+library(purrr)
+
+# Process the genres column
+genres_list <- str_replace_all(spotify_data$track_genre, "\\[|\\]|'", "") # Remove brackets and single quotes
+genres_list <- str_split(genres_list, ", ") # Split by comma and space to get individual genres
+genres_list <- lapply(genres_list, function(x) x[x != ""]) # Remove empty strings from each sublist
+
+# Flatten the list to a vector to find unique genres
+genres_vector <- unlist(genres_list) 
+unique_genres <- unique(genres_vector) # Find unique genres
+
+# Print the count and names of unique genres
+print(length(unique_genres))
+print(unique_genres)
+```
+
+```{r}
+
+# Simplify genre for each song and remove songs that don't mention predefined genres:
+
+# Define the predefined genres
+predefined_genres <- c("bebop", "rock", "punk", "metal", "blues", "emo", "classical", 
+                       "folk", "edm", "broadway", "house", "bluegrass", "pop", "r&b", 
+                       "funk", "soul", "rap", "indie", "country", "reggae", "hip hop",
+                       "jam", "ska", "jazz")
+
+# Adjusted function to find the most common genre, making it case-insensitive
+# and able to match partials (e.g., "indie rock" contains "indie")
+find_most_common_genre <- function(genres, predefined_genres) {
+  genres <- str_to_lower(unlist(genres))  # Lowercase everything for case-insensitive comparison
+  matches <- sapply(predefined_genres, function(genre) {
+    sum(str_detect(genres, fixed(genre)))
+  })
+  
+  if (length(matches) > 0 && max(matches) > 0) {
+    return(predefined_genres[which.max(matches)])  # Return the genre with the most matches
+  } else {
+    return(NA)  # Or "Other"
+  }
+}
+
+# Apply the function to each row in the dataframe
+spotify_simplified <- spotify_data %>%
+  mutate(genre = map_chr(genres_list, ~find_most_common_genre(.x, predefined_genres)))
+
+# Remove tracks where new genre value is NA
+spotify_simplified <- spotify_simplified %>%
+  filter(!is.na(genre))
+
+# Correct errors: if a track contains "emo" in the artists_genres, it shouldn't fall in other categories
+# Similar for "ska" and "broadway"
+spotify_simplified <- spotify_simplified %>%
+  mutate(
+    genre = if_else(str_detect(str_to_lower(track_genre), "emo"), "emo", genre),
+    genre = if_else(str_detect(str_to_lower(track_genre), "ska"), "ska", genre),
+    genre = if_else(str_detect(str_to_lower(track_genre), "broadway"), "broadway", genre))
+
+# Print the first few rows of the simplified dataframe
+head(spotify_simplified)
+
+```
+
+```{r}
+# Box Plots comparing attributes for each genre
+
+# box plot for danceability for each genre
+ggplot(spotify_simplified, aes(x = genre, y = danceability, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Danceability Across Genres",
+       x = "Genre",
+       y = "Danceability") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),  # Rotate x-axis labels for readability
+        legend.position = "none")  # Hide the legend if it's not needed
+
+# box plot for energy for each genre
+ggplot(spotify_simplified, aes(x = genre, y = energy, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Energy Across Genres",
+       x = "Genre",
+       y = "Energy") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# box plot for speechiness for each genre
+ggplot(spotify_simplified, aes(x = genre, y = speechiness, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Speechiness Across Genres",
+       x = "Genre",
+       y = "Speechiness") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# box plot for acousticness for each genre
+ggplot(spotify_simplified, aes(x = genre, y = acousticness, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Acousticness Across Genres",
+       x = "Genre",
+       y = "Acousticness") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# box plot for instrumentalness for each genre
+ggplot(spotify_simplified, aes(x = genre, y = instrumentalness, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Instrumentalness Across Genres",
+       x = "Genre",
+       y = "Instrumentalness") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# box plot for liveness for each genre
+ggplot(spotify_simplified, aes(x = genre, y = liveness, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Liveness Across Genres",
+       x = "Genre",
+       y = "Liveness") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# box plot for valence for each genre
+ggplot(spotify_simplified, aes(x = genre, y = valence, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Valence Across Genres",
+       x = "Genre",
+       y = "Valence") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+# box plot for tempo for each genre
+ggplot(spotify_simplified, aes(x = genre, y = tempo, fill = genre)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Distribution of Tempo Across Genres",
+       x = "Genre",
+       y = "Tempo") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+  # danceability: suitability for dancing based on tempo, rhythmic stability, beat strength, and overall regularity
+  # energy: perceptual measure of intensity and activity; includes dynamic range, loudness, timbre, onset rate, general entropy
+  # speechiness:
+    # near 1: talk show, audio book, poetry
+    # above 0.66: tracks probably made entirely of spoken words
+    # 0.33-0.66: tracks may contain both music and speech
+    # <0.33: music and other non-speech like tracks
+  # acousticness: represents confidence measure of whether track is acoustic
+  # instrumentalness: predicts whether track has no vocals; values above 0.5 should represent instrumental tracks
+  # liveness: probability that track was recorded live
+  # valence: represents musical positiveness
+  # tempo: speed of music
+
+# Code for ordering from highest to lowest, needing adjustment: (from single_factor_anova_visualization file)
+# spotify_simplified$clipping<-factor(spotify_simplified$clipping, levels=spotify_simplified$clipping[order(spotify_simplified$median_danceability,decreasing = TRUE)])
+# ggplot(data=temp,aes(x=clipping,y=mean.gp,fill=clipping))+geom_col()
+```
+
+
+```{r}
+# Sorting songs by attributes
+
+# Get the 50 songs with the highest danceability score
+top_50_danceable_songs_sorted_by_popularity <- spotify %>%
+  arrange(desc(danceability)) %>%
+  slice(1:50) %>%
+  arrange(desc(popularity))
+print(top_50_danceable_songs_sorted_by_popularity)
+
+# Energy
+top_50_energetic_songs_sorted_by_popularity <- spotify %>%
+  arrange(desc(energy)) %>%
+  slice(1:50) %>%
+  arrange(desc(popularity))
+print(top_50_energetic_songs_sorted_by_popularity)
+
+# Get most popular 50,000 songs and filter them for desired traits
+
+# Musical attribute descriptions; note median vals below:
+  # danceability: suitability for dancing based on tempo, rhythmic stability, beat strength, and overall regularity
+  # energy: 0.59 perceptual measure of intensity and activity; includes dynamic range, loudness, timbre, onset rate, general entropy
+  # speechiness: 0.047
+    # near 1: talk show, audio book, poetry
+    # above 0.66: tracks probably made entirely of spoken words
+    # 0.33-0.66: tracks may contain both music and speech
+    # <0.33: music and other non-speech like tracks
+  # acousticness: 0.26 represents confidence measure of whether track is acoustic
+  # instrumentalness: 0.001 predicts whether track has no vocals; values above 0.5 should represent instrumental tracks
+  # liveness: 0.12 probability that track was recorded live
+  # valence: 0.43 represents musical positiveness
+  # tempo: speed of music
+
+# Template
+top_songs_of_genre <- spotify %>%
+  filter(grepl("rock", track_genre)) %>%        # Choose genre here
+  arrange(desc(popularity)) %>%
+  slice(1:50000)
+# Adjust filters as desired
+filtered_songs <- top_songs_of_genre %>%
+  filter(
+    danceability >= 0.40 & danceability <= 1 &         # median 0.57
+    energy >= 0.60 & energy <= 1 &                     # median 0.59
+    speechiness >= 0.04 & speechiness <= 1 &           # median 0.047
+    acousticness >= 0.00 & acousticness <= 1 &         # median 0.26
+    instrumentalness >= 0.00 & instrumentalness <= 1 & # median 0.001
+    liveness >= 0.00 & liveness <= 1 &                 # median 0.12
+    valence >= 0.70 & valence <= 1 &                   # median 0.43
+    tempo >= 0 & tempo <=200                           # median 120
+    )
+```
+
+
+```{r}
+# Creating a dataframe with attributes by genre
+
+# Function to calculate summary statistics for a genre
+calculate_summary <- function(genre) {
+  genre_songs <- spotify %>% 
+    filter(grepl(genre, track_genre)) %>% 
+    summarise(
+      Mean_danceability = mean(danceability, na.rm = TRUE),
+      Mean_energy = mean(energy, na.rm = TRUE),
+      Mean_speechiness = mean(speechiness, na.rm = TRUE),
+      Mean_acousticness = mean(acousticness, na.rm = TRUE),
+      Mean_instrumentalness = mean(instrumentalness, na.rm = TRUE),
+      Mean_liveness = mean(liveness, na.rm = TRUE),
+      Mean_valence = mean(valence, na.rm = TRUE),
+      Mean_tempo = mean(tempo, na.rm = TRUE)
+    ) %>%
+    mutate(Genre = genre) # Add the genre name to the summary
+  
+  return(genre_songs)
+}
+
+# List of genres
+genres <- c("bebop", "rock", "punk", "metal", "blues", "emo", "classical", "folk", 
+            "edm", "broadway", "house", "bluegrass", "pop", "r&b", "funk", "soul",
+            "rap", "indie", "country", "reggae", "hip hop", "jam", "ska", "jazz")
+
+# Calculate summary for each genre and combine
+genre_summaries <- lapply(genres, calculate_summary) %>% 
+  bind_rows()
+
+# Reorder dataframe so Genre is the first column
+mean_attributes_by_genre <- dplyr::select(genre_summaries, Genre, everything())
+
+print(mean_attributes_by_genre)
+
+```
+
+```{r}
+# Sample a subset of the data
+set.seed(123)
+spotify_sample <- spotify_simplified %>% sample_n(10000)
+
+# Prepare the data
+features_sampled <- spotify_sample %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+
+# Standardize the data
+features_scaled_sampled <- scale(features_sampled)
+
+
+```
+
+```{r}
+# Increase memory limit (Windows only)
+memory.limit(size = 16000)  # Increase to 16 GB (adjust based on your system's capacity)
+
+```
+
+```{r}
+# Select the relevant columns for clustering
+spotify_data <- spotify_simplified[, c("danceability", "energy", "speechiness", 
+                            "acousticness", "instrumentalness", "liveness", 
+                            "valence", "tempo")]
+
+# Standardize the data
+spotify_data_scaled <- scale(spotify_data)
+
+# Determine the optimal number of clusters using the Elbow Method
+wss <- (nrow(spotify_data_scaled) - 1) * sum(apply(spotify_data_scaled, 2, var))
+for (i in 2:15) {
+  wss[i] <- sum(kmeans(spotify_data_scaled, centers = i, nstart = 25)$tot.withinss)
+}
+
+# Plot the Elbow Method
+plot(1:15, wss, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of clusters", ylab = "Total within-clusters sum of squares")
+```
+
+
+```{r}
+# Creating more clusters to try to better match genres; 13 yield decent results
+
+# Define the number of clusters
+num_clusters <- 13
+
+# Perform K-Means clustering with the stated number of clusters
+set.seed(123)
+kmeans_result <- kmeans(spotify_data_scaled, centers = num_clusters, nstart = 25, iter.max = 1000)
+
+# Create dataframe for the cluster results
+spotify_13_clusters <- spotify_simplified %>%
+  mutate(cluster = as.factor(kmeans_result$cluster))
+
+
+# Visualize the clusters using ggplot2 (for example, using the first two principal components)
+pca_result <- prcomp(spotify_data_scaled)
+spotify_13_clusters$pca1 <- pca_result$x[, 1]
+spotify_13_clusters$pca2 <- pca_result$x[, 2]
+
+ggplot(spotify_13_clusters, aes(x = pca1, y = pca2, color = cluster)) +
+  geom_point(alpha = 0.6) +
+  labs(title = "K-Means Clustering of Spotify Songs", 
+       x = "Principal Component 1", y = "Principal Component 2") +
+  theme_minimal()
+
+# Initialize lists to store the results
+filtered_data_list <- list()
+count_data_list <- list()
+sample_data_list <- list()
+
+# Loop through each cluster
+for (i in 1:num_clusters) {
+  # Filter the data for the current cluster and select columns
+  filtered_data <- spotify_13_clusters %>%
+    filter(cluster == i) %>%
+    dplyr::select(track_id, artists, track_genre)
+  
+  # Store the filtered data in the list
+  filtered_data_list[[i]] <- filtered_data
+  
+  # Count the genres and store the result in the list
+  count_data <- filtered_data %>%
+    count(track_genre, sort = TRUE)
+  count_data_list[[i]] <- count_data
+  
+  # Take a sample of 20 songs and store in the list
+  sample_data <- filtered_data %>%
+    sample_n(20)
+  sample_data_list[[i]] <- sample_data
+}
+
+count_data_list     # List of count data for each cluster
+
+
+# For each genre, get the list in count_data_list where it occurs with the highest count
+for (genre in predefined_genres) {
+  genre_counts <- sapply(count_data_list, function(count_data) {
+    if (any(count_data$genre == genre)) {
+      return(count_data[count_data$genre == genre, "n"])
+    } else {
+      return(NA)  # Return NA if the genre is not found
+    }
+  })
+  
+  # Remove NA values before using which.max
+  if (all(is.na(genre_counts))) {
+    print(paste(genre, ": Not found in any list"))
+  } else {
+    max_index <- which.max(genre_counts)
+    print(paste(genre, ":", max_index))
+  }
+}
+
+# Initialize a list to store the genres assigned to each cluster
+cluster_genres <- vector("list", num_clusters)
+
+# Iterate through each predefined genre
+for (genre in predefined_genres) {
+  # Get the counts of the genre in each cluster
+  genre_counts <- sapply(count_data_list, function(count_data) {
+    # Handle cases where the genre might not be present in a cluster's count data
+    if (genre %in% count_data$genre) {
+      return(count_data[count_data$genre == genre, "n"])
+    } else {
+      return(0)
+    }
+  })
+  
+  # Find the cluster with the maximum count for the genre
+  max_cluster <- which.max(genre_counts)
+  
+  # Assign the genre to the cluster with the highest count
+  # cluster_genres[[max_cluster]] <- c(cluster_genres[[max_cluster]], genre)
+  if (genre_counts[max_cluster] > 0) {
+    cluster_genres[[max_cluster]] <- c(cluster_genres[[max_cluster]], genre)
+  }
+}
+
+# Remove NULL values from cluster_genres
+# cluster_genres <- lapply(cluster_genres, function(x) if (is.null(x)) character(0) else x)
+cluster_genres <- lapply(cluster_genres, function(x) x[!sapply(x, is.null)])
+
+# Print the results
+for (i in 1:num_clusters) {
+  print(cat("Cluster", i, ":", cluster_genres[[i]], "\n"))
+}
+
+```
+
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+# Select and standardize the audio features
+features <- spotify_simplified %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+features_scaled <- scale(features)
+
+# Perform K-Means clustering
+set.seed(123)
+k <- 13 # Number of clusters, you can adjust this
+kmeans_result <- kmeans(features_scaled, centers = k, nstart = 25)
+
+# Add cluster assignments to the data
+spotify_simplified$cluster <- as.factor(kmeans_result$cluster)
+
+# Visualize the clusters
+fviz_cluster(kmeans_result, data = features_scaled) + 
+  ggtitle("K-Means Clustering of Spotify Tracks by Audio Features")
+
+# Evaluate clustering by comparing with actual genres
+table(spotify_simplified$cluster, spotify_simplified$track_genre)
+
+```
+```{r}
+# Ensure aricode package is installed and loaded
+if (!require(aricode)) install.packages("aricode")
+library(aricode)
+
+# Define the selected genres
+selected_genres <- c("bebop", "rock", "punk", "metal", "blues", "emo", "classical", 
+                     "folk", "edm", "broadway", "house", "bluegrass", "pop", "r&b", 
+                     "funk", "soul", "rap", "indie", "country", "reggae", "hip hop",
+                     "jam", "ska", "jazz")
+
+# Filter spotify_simplified for the specified genres
+spotify_filtered <- subset(spotify_simplified, genre %in% selected_genres)
+
+# Ensure there are no missing values in the cluster and genre columns
+spotify_filtered <- spotify_filtered[!is.na(spotify_filtered$cluster) & !is.na(spotify_filtered$genre), ]
+
+# Ensure cluster and genre are factors
+spotify_filtered$cluster <- as.factor(spotify_filtered$cluster)
+spotify_filtered$genre <- as.factor(spotify_filtered$genre)
+
+# Create a contingency table
+contingency_table <- table(spotify_filtered$cluster, spotify_filtered$genre)
+
+# Print the contingency table to see the distribution
+print(contingency_table)
+
+# Calculate the Adjusted Rand Index (ARI)
+ari <- adjustedRandIndex(spotify_filtered$cluster, spotify_filtered$genre)
+print(paste("Adjusted Rand Index:", ari))
+
+# Calculate Normalized Mutual Information (NMI)
+nmi <- NMI(spotify_filtered$cluster, spotify_filtered$genre)
+print(paste("Normalized Mutual Information:", nmi))
+
+```
+
+
+```{r}
+#individual attribute graphs
+
+# Load necessary libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+library(tidyr)
+
+# Select and standardize the audio features, excluding 'tempo'
+features <- spotify_simplified %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence)
+features_scaled <- scale(features)
+
+# Perform K-Means clustering
+set.seed(123)
+k <- 13 # Number of clusters, you can adjust this
+kmeans_result <- kmeans(features_scaled, centers = k, nstart = 25)
+
+# Add cluster assignments to the data
+spotify_simplified$cluster <- as.factor(kmeans_result$cluster)
+
+# Calculate the means of the attributes for each cluster
+cluster_means <- spotify_simplified %>%
+  group_by(cluster) %>%
+  summarise(across(c(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo), mean, .names = "mean_{.col}"))
+
+# Reshape the data for plotting
+cluster_means_long <- cluster_means %>%
+  pivot_longer(cols = -cluster, names_to = "attribute", values_to = "mean")
+
+# Function to plot each attribute
+plot_attribute <- function(attribute_name) {
+  attribute_data <- cluster_means_long %>%
+    filter(attribute == attribute_name)
+  
+  ggplot(attribute_data, aes(x = cluster, y = mean, fill = cluster)) +
+    geom_bar(stat = "identity") +
+    labs(title = paste("Mean of", attribute_name, "by Cluster"), x = "Cluster", y = "Mean Value") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# List of attributes to plot
+attributes <- unique(cluster_means_long$attribute)
+
+# Plot each attribute
+plots <- lapply(attributes, plot_attribute)
+
+# Print all plots
+for (plot in plots) {
+  print(plot)
+}
+
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+# Filter the dataset to include only tracks from "rock" and "classical" genres
+rock_classical_data <- spotify_simplified %>%
+  filter(genre %in% c("rock", "classical"))
+
+# Select and standardize the audio features
+features <- rock_classical_data %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+features_scaled <- scale(features)
+
+# Perform K-Means clustering with k = 2
+set.seed(123)
+k <- 2
+kmeans_result <- kmeans(features_scaled, centers = k, nstart = 25)
+
+# Add cluster assignments to the data
+rock_classical_data$cluster <- as.factor(kmeans_result$cluster)
+
+# Visualize the clusters
+fviz_cluster(kmeans_result, data = features_scaled) + 
+  ggtitle("K-Means Clustering of Rock and Classical Tracks by Audio Features")
+
+# Create a contingency table to compare clusters with actual genres
+contingency_table <- table(rock_classical_data$cluster, rock_classical_data$genre)
+print("Contingency Table:")
+print(contingency_table)
+
+# Calculate Adjusted Rand Index (ARI) and Normalized Mutual Information (NMI)
+install.packages("mclust")
+install.packages("aricode")
+library(mclust)
+library(aricode)
+
+# Calculate ARI
+ari <- adjustedRandIndex(rock_classical_data$cluster, rock_classical_data$genre)
+print(paste("Adjusted Rand Index:", ari))
+
+# Calculate NMI
+nmi <- NMI(rock_classical_data$cluster, rock_classical_data$genre)
+print(paste("Normalized Mutual Information:", nmi))
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+
+# Filter the dataset to include only tracks from "reggae" and "country" genres
+reggae_country_data <- spotify_simplified %>%
+  filter(genre %in% c("reggae", "country"))
+
+# Select and standardize the audio features
+features <- reggae_country_data %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+features_scaled <- scale(features)
+
+# Perform K-Means clustering with k = 2
+set.seed(123)
+k <- 2
+kmeans_result <- kmeans(features_scaled, centers = k, nstart = 25)
+
+# Add cluster assignments to the data
+reggae_country_data$cluster <- as.factor(kmeans_result$cluster)
+
+# Visualize the clusters
+fviz_cluster(kmeans_result, data = features_scaled) + 
+  ggtitle("K-Means Clustering of Reggae and Country Tracks by Audio Features")
+
+# Create a contingency table to compare clusters with actual genres
+contingency_table <- table(reggae_country_data$cluster, reggae_country_data$genre)
+print("Contingency Table:")
+print(contingency_table)
+
+# Calculate Adjusted Rand Index (ARI) and Normalized Mutual Information (NMI)
+install.packages("mclust")
+install.packages("aricode")
+library(mclust)
+library(aricode)
+
+# Calculate ARI
+ari <- adjustedRandIndex(reggae_country_data$cluster, reggae_country_data$genre)
+print(paste("Adjusted Rand Index:", ari))
+
+# Calculate NMI
+nmi <- NMI(reggae_country_data$cluster, reggae_country_data$genre)
+print(paste("Normalized Mutual Information:", nmi))
+
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(cluster)
+library(factoextra)
+library(ggplot2)
+library(dbscan)
+library(mclust)
+library(aricode)
+
+# Filter the dataset to include only tracks from "rock" and "classical" genres
+rock_classical_data <- spotify_simplified %>%
+  filter(genre %in% c("rock", "classical"))
+
+# Select and standardize the audio features
+features <- rock_classical_data %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+features_scaled <- scale(features)
+
+# Perform DBSCAN clustering
+set.seed(123)
+eps <- 0.5  # Example value for eps, this might need to be tuned
+minPts <- 100  # Example value for minPts, this might need to be tuned
+dbscan_result <- dbscan(features_scaled, eps = eps, minPts = minPts)
+
+# Add cluster assignments to the data
+rock_classical_data$cluster <- as.factor(dbscan_result$cluster)
+
+# Visualize the clusters
+fviz_cluster(list(data = features_scaled, cluster = dbscan_result$cluster)) + 
+  ggtitle("DBSCAN Clustering of Rock and Classical Tracks by Audio Features")
+
+# Create a contingency table to compare clusters with actual genres
+contingency_table <- table(rock_classical_data$cluster, rock_classical_data$genre)
+print("Contingency Table:")
+print(contingency_table)
+
+# Calculate Adjusted Rand Index (ARI) and Normalized Mutual Information (NMI)
+
+# Calculate ARI
+ari <- adjustedRandIndex(rock_classical_data$cluster, rock_classical_data$genre)
+print(paste("Adjusted Rand Index:", ari))
+
+# Calculate NMI
+nmi <- NMI(rock_classical_data$cluster, rock_classical_data$genre)
+print(paste("Normalized Mutual Information:", nmi))
+
+```
+
+```{r}
+# Load necessary libraries
+library(dbscan)
+library(factoextra)
+library(ggplot2)
+
+# Select and standardize the audio features
+features <- spotify_simplified %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+features_scaled <- scale(features)
+
+# Perform DBSCAN clustering
+eps <- 50  # Example value for eps, this might need to be tuned
+minPts <- 5  # Example value for minPts, this might need to be tuned
+dbscan_result <- dbscan(features_scaled, eps = eps, minPts = minPts)
+
+# Visualize the clusters
+p <- fviz_cluster(list(data = features_scaled, cluster = dbscan_result$cluster)) +
+  ggtitle("DBSCAN Clustering of Spotify Tracks by Audio Features") +
+  theme(legend.position = "bottom") +
+  geom_point(aes(color = as.factor(dbscan_result$cluster)))
+
+print(p)
+
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(ggplot2)
+library(factoextra)
+
+
+# Select and standardize the audio features
+features <- spotify_simplified %>%
+  select(danceability, energy, speechiness, acousticness, instrumentalness, liveness, valence, tempo)
+features_scaled <- scale(features)
+
+# Perform K-means clustering
+set.seed(123) # For reproducibility
+kmeans_result <- kmeans(features_scaled, centers = 10, nstart = 25)
+
+# Add cluster assignments to the data
+spotify_simplified$cluster_kmeans <- as.factor(kmeans_result$cluster)
+
+# Visualize the clusters for each genre separately
+genres <- unique(spotify_simplified$track_genre)
+
+for (genre in genres) {
+  genre_data <- spotify_simplified %>% filter(track_genre == genre)
+  genre_features <- features_scaled[spotify_simplified$track_genre == genre, ]
+  genre_kmeans_result <- kmeans(genre_features, centers = 3, nstart = 25) # Adjust number of centers as needed
+  genre_data$cluster_genre_kmeans <- as.factor(genre_kmeans_result$cluster)
+  
+  plot_title <- paste("K-means Clustering for", genre, "Genre")
+  p <- fviz_cluster(list(data = genre_features, cluster = genre_kmeans_result$cluster)) +
+    ggtitle(plot_title)
+  
+  print(p)
+}
+
+
+```
+
+
+
+```{r}
+# Install cowplot package if not already installed
+if (!requireNamespace("cowplot", quietly = TRUE)) {
+  install.packages("cowplot")
+}
+
+# Load the cowplot package
+library(cowplot)
+
+# Now try running your code again
+
+# Load necessary libraries
+library(ggplot2)
+library(reshape2)
+
+# Create histograms for each category
+hist_danceability <- ggplot(spotify_simplified, aes(x = danceability)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
+  labs(title = "Distribution of Danceability", x = "Danceability", y = "Frequency")
+
+hist_energy <- ggplot(spotify_simplified, aes(x = energy)) +
+  geom_histogram(binwidth = 0.05, fill = "lightgreen", color = "black") +
+  labs(title = "Distribution of Energy", x = "Energy", y = "Frequency")
+
+hist_speechiness <- ggplot(spotify_simplified, aes(x = speechiness)) +
+  geom_histogram(binwidth = 0.05, fill = "salmon", color = "black") +
+  labs(title = "Distribution of Speechiness", x = "Speechiness", y = "Frequency")
+
+hist_acousticness <- ggplot(spotify_simplified, aes(x = acousticness)) +
+  geom_histogram(binwidth = 0.05, fill = "gold", color = "black") +
+  labs(title = "Distribution of Acousticness", x = "Acousticness", y = "Frequency")
+
+hist_instrumentalness <- ggplot(spotify_simplified, aes(x = instrumentalness)) +
+  geom_histogram(binwidth = 0.05, fill = "lightcoral", color = "black") +
+  labs(title = "Distribution of Instrumentalness", x = "Instrumentalness", y = "Frequency")
+
+hist_liveness <- ggplot(spotify_simplified, aes(x = liveness)) +
+  geom_histogram(binwidth = 0.05, fill = "lightskyblue", color = "black") +
+  labs(title = "Distribution of Liveness", x = "Liveness", y = "Frequency")
+
+hist_valence <- ggplot(spotify_simplified, aes(x = valence)) +
+  geom_histogram(binwidth = 0.05, fill = "lightgreen", color = "black") +
+  labs(title = "Distribution of Valence", x = "Valence", y = "Frequency")
+
+hist_tempo <- ggplot(spotify_simplified, aes(x = tempo)) +
+  geom_histogram(binwidth = 5, fill = "lightpink", color = "black") +
+  labs(title = "Distribution of Tempo", x = "Tempo", y = "Frequency")
+
+# Combine histograms into a grid
+hist_grid <- plot_grid(hist_danceability, hist_energy, hist_speechiness, hist_acousticness,
+                       hist_instrumentalness, hist_liveness, hist_valence, hist_tempo,
+                       ncol = 2)
+
+# Print the histogram grid
+print(hist_grid)
+
+# Create a heatmap comparing the categories
+heatmap_data <- cor(select(spotify_simplified, danceability:tempo))
+
+ggplot(data = melt(heatmap_data), aes(Var1, Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Correlation Heatmap of Audio Features")
+
+
+
+```
+
+```{r}
+
+# Load necessary libraries
+library(ggplot2)
+
+
+# Define the function to create histograms for each category
+create_histogram <- function(data, category) {
+  # Create a histogram for the specified category
+  ggplot(data, aes(x = !!sym(category))) +
+    geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black") +
+    labs(title = paste("Histogram of", category), x = category, y = "Frequency") +
+    theme_minimal()
+}
+
+# Specify the list of categories for which you want to create histograms
+categories <- c("danceability", "energy", "speechiness", "acousticness", 
+                "instrumentalness", "liveness", "valence", "tempo")
+
+# Create and display individual plots for each category
+for (category in categories) {
+  # Create histogram for the current category
+  plot <- create_histogram(spotify_data, category)
+  
+  # Display the plot in a separate window
+  print(plot)
+}
+
+```
+
+```{r}
+#DBSCAN
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Assuming you have already processed and simplified the genre information
+
+# Calculate genre counts
+genre_counts <- table(spotify_simplified$genre)
+
+# Convert to dataframe for ggplot
+genre_counts_df <- data.frame(genre = names(genre_counts), count = as.numeric(genre_counts))
+
+# Create a pie chart
+pie_chart <- ggplot(genre_counts_df, aes(x = "", y = count, fill = genre)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "right") +
+  labs(title = "Genre Distribution")
+
+# Display the pie chart
+print(pie_chart)
+
+```
+```{r}
+# Create a pie chart with adjusted settings
+pie_chart_adjusted <- ggplot(genre_counts_df, aes(x = "", y = count, fill = genre)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "bottom",        # Move legend to the bottom
+        legend.direction = "horizontal",  # Display legend horizontally
+        legend.box.spacing = unit(0.2, "cm"),  # Increase spacing between legend items
+        legend.key.height = unit(1.5, "line")) +  # Adjust the height of the legend key
+  labs(title = "Genre Distribution")
+
+# Display the adjusted pie chart
+print(pie_chart_adjusted)
+
+```
+
+```{r}
+# Create a color palette for genres
+genre_colors <- c(
+  "bebop" = "#1f77b4",
+  "rock" = "#ff7f0e",
+  "punk" = "#2ca02c",
+  "metal" = "#d62728",
+  "blues" = "#9467bd",
+  "emo" = "#8c564b",
+  "classical" = "#e377c2",
+  "folk" = "#7f7f7f",
+  "edm" = "#bcbd22",
+  "broadway" = "#17becf",
+  "house" = "#aec7e8",
+  "bluegrass" = "#ffbb78",
+  "pop" = "#98df8a",
+  "r&b" = "#ff9896",
+  "funk" = "#c5b0d5",
+  "soul" = "#c49c94",
+  "rap" = "#f7b6d2",
+  "indie" = "#c7c7c7",
+  "country" = "#dbdb8d",
+  "reggae" = "#9edae5",
+  "hip hop" = "#adadad",
+  "jam" = "#ff9896",
+  "ska" = "#ff9896",
+  "jazz" = "#98df8a"
+)
+
+# Create the bar plot with colored genres
+genre_barplot_colored <- ggplot(genre_counts_df, aes(x = reorder(genre, -count), y = count, fill = genre)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Genre Distribution",
+       x = "Genre",
+       y = "Count") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_flip() +  # Flip the coordinates to make the plot horizontal
+  scale_fill_manual(values = genre_colors)  # Apply the custom color palette
+
+# Display the colored bar plot
+print(genre_barplot_colored)
+
+```
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Create boxplots for each audio feature grouped by genre
+boxplot_audio_features <- function(feature_name) {
+  ggplot(spotify_simplified, aes(x = genre, y = !!sym(feature_name), fill = genre)) +
+    geom_boxplot() +
+    labs(title = paste("Boxplot of", feature_name, "by Genre"),
+         x = "Genre",
+         y = feature_name) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+}
+
+# List of audio features to create boxplots for
+audio_features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo")
+
+# Create boxplots for each audio feature
+for (feature in audio_features) {
+  plot_name <- paste("boxplot_", feature, sep = "")
+  assign(plot_name, boxplot_audio_features(feature))
+  print(get(plot_name))
+}
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Scatter Plot Matrix of Audio Features
+audio_features <- c("danceability", "energy", "loudness", "speechiness", "acousticness", "instrumentalness", "liveness", "valence", "tempo")
+
+# Select the relevant columns from the dataset
+audio_data <- spotify_simplified[, c("track_name", audio_features)]
+
+# Create scatter plot matrix
+pairs(audio_data[, -1], main = "Scatter Plot Matrix of Audio Features", pch = 21, bg = "blue", col = "black", cex = 0.8, cex.axis = 0.8)
+
+
+```
+
+```{r}
+# Calculate correlations between audio features
+correlation_matrix <- cor(audio_data[, -1])
+
+# Generate heatmap with rainbow colors
+heatmap(correlation_matrix, col = rainbow(20), main = "Heatmap of Audio Feature Correlations")
+
+```
+
+```{r}
+# Generate a sample genre similarity matrix (random values)
+set.seed(123)  # for reproducibility
+num_genres <- 10
+genre_similarity_matrix <- matrix(runif(num_genres^2), nrow = num_genres)
+
+# Set diagonal to 1 (similarity of a genre to itself)
+diag(genre_similarity_matrix) <- 1
+
+# Hierarchical clustering of genres
+distances <- as.dist(1 - genre_similarity_matrix)  # Convert similarity to distance
+hc <- hclust(distances)
+
+# Order the matrix based on hierarchical clustering
+ordered_matrix <- genre_similarity_matrix[hc$order, hc$order]
+
+# Sample genre labels
+genre_labels <- c("Bebop", "Rock", "Punk", "Metal", "Blues", "Emo", "Classical", 
+                   "Folk", "EDM", "Broadway", "House", "Bluegrass", "Pop", "R&B", 
+                   "Funk", "Soul", "Rap", "Indie", "Country", "Reggae", "Hip Hop",
+                   "Jam", "Ska", "Jazz")
+
+# Create the clustered heatmap with genre labels
+heatmap(ordered_matrix, 
+        col = heat.colors(20),  # Choose a color palette
+        main = "Clustered Heatmap of Genre Similarity",
+        xlab = "Genres",
+        ylab = "Genres",
+        labRow = genre_labels,  # Label rows (genres)
+        labCol = genre_labels)  # Label columns (genres)
+
+
+```
+
+
